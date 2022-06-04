@@ -36,6 +36,33 @@ function makeFailingSync<T>(innerTable: Table<T>) {
         return innerTable
     }
 }
+// describe('Rotem', () => {
+//     test('test1', async () => {
+//         type Book = {
+//             title: string,
+//             author: string,
+//         }
+        
+        
+//         const templateBookTable = Object.freeze({
+//             'A': {title: 'title_A', author: 'author_A'},
+//             'B': {title: 'title_B', author: 'author_B'}
+//         } as Table<Book>)
+
+//         console.log(templateBookTable)
+
+//         const tt = {};
+//         Object.assign(tt, templateBookTable);
+//         Object.assign(tt, {'A': {title: 'title_E', author: 'author_E'}})
+//         console.log(tt)
+        // Object.entries(templateBookTable)
+
+        // console.log(tt)
+        // Object.defineProperty(tt, 'A', { value: {title: 'title_F', author: 'author_F'}} ) as Record<string, Readonly<Book>>;
+        // Object.assign(tt, {'E': {title: 'title_E', author: 'author_E'}})
+        // console.log(tt)
+//     })
+// })
 
 describe('Assignment 4 Part 2', () => {
     describe('Q2.1 (11pts)', () => {
@@ -66,6 +93,17 @@ describe('Assignment 4 Part 2', () => {
             expect(B).toEqual(templateBookTable['B'])
         })
 
+        test('delete', async () => {
+            await service.set('W', {title: 'title_W', author: 'author_W'})
+            const W = await service.get('W')
+            expect(W).toEqual({title: 'title_W', author: 'author_W'})
+            
+            await service.delete('W')
+            await expect(service.get('W')).rejects.toEqual(MISSING_KEY)
+        })
+
+
+
         test('throws on missing key (get)', async () => {
             await expect(service.get('C')).rejects.toEqual(MISSING_KEY)
         })
@@ -78,7 +116,7 @@ describe('Assignment 4 Part 2', () => {
             await expect(getAll(service, ['A', 'C'])).rejects.toEqual(MISSING_KEY)
         })
     })
-
+    
     describe('Q2.2 (12pts)', () => {
         type Author = {
             firstName: string,
@@ -89,7 +127,7 @@ describe('Assignment 4 Part 2', () => {
             author: { table: 'authors', key: string },
         }
 
-
+        
         const exampleAuthorSync = makeSimpleSync<Author>()
         const exampleBookSync = makeSimpleSync<Book>()
         let authorService: TableService<Author> = null!
@@ -102,34 +140,67 @@ describe('Assignment 4 Part 2', () => {
                 'B': {firstName: 'f_b', lastName: 'l_b'}
             })
             authorService = makeTableService<Author>(exampleAuthorSync)
-
+            
             await exampleBookSync({
                 'A': {title: 'title_A', author: {table: 'authors', key: 'A'}},
                 'B': {title: 'title_B', author: {table: 'authors', key: 'B'}}
             })
             bookService = makeTableService<Book>(exampleBookSync)
-
+            
             allServices = {
                 'authors': authorService,
                 'books': bookService,
             }
         })
-
+        
         test('can reconstruct object', async () => {
             const obj = await constructObjectFromTables(allServices, {table: 'books', key: 'A'})
             expect(obj).toEqual({title: 'title_A', author: {firstName: 'f_a', lastName: 'l_a'}})
         })
-
+        
         test('throws on missing table', async () => {
             await expect(constructObjectFromTables(allServices, {table: 'books2', key: 'A'})).rejects.toEqual(MISSING_TABLE_SERVICE)
         })
-    })
 
+        test('throws on missing key', async () => {
+            await expect(constructObjectFromTables(allServices, {table: 'books', key: 'C'})).rejects.toEqual(MISSING_KEY)
+        })
+
+        // Rotem and Nor addition
+        type Reader = {
+            name: string,
+            book: { table: 'books', key: string },
+        }
+        const exampleReaderSync = makeSimpleSync<Reader>()
+        let ReaderService: TableService<Reader> = null!
+        let allServices2: TableServiceTable = null!
+        
+        beforeEach(async () => {
+
+            await exampleReaderSync({
+                'Mor': {name: 'title_Mor', book: {table: 'books', key: 'A'}},
+                'Rotem': {name: 'title_Rotem', book: {table: 'books', key: 'B'}}
+            })
+            ReaderService = makeTableService<Reader>(exampleReaderSync)
+
+            allServices2 = {
+                'authors': authorService,
+                'books': bookService,
+                'readers': ReaderService,
+            }
+        })
+        test('can reconstruct recursive object', async () => {
+            const obj = await constructObjectFromTables(allServices2, {table: 'readers', key: 'Mor'})
+            expect(obj).toEqual({name: 'title_Mor', book: {title: 'title_A', author: {firstName: 'f_a', lastName: 'l_a'}} })
+        })
+
+    })
+    
     describe('Q2.3 (10pts)', () => {
-        function countTo(n: number) {
-            return function* (): Generator<number> {
-                for (let i = 1; i <= n; i++) {
-                    yield i
+            function countTo(n: number) {
+                    return function* (): Generator<number> {
+                            for (let i = 1; i <= n; i++) {
+                                    yield i
                 }
             }
         }
