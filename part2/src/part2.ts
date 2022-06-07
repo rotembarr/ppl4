@@ -168,7 +168,13 @@ export async function makeReactiveTableService<T>(sync: (table?: Table<T>) => Pr
             _observers.map((obs) => obs(newTable))
         }
         
-        _table = await _sync(newTable).catch((reason) => {_observers.map((obs) => obs(_table)); throw reason})
+        _table = await _sync(newTable).catch(
+            (reason) => {
+                if (optimistic)
+                    _observers.map((obs) => obs(_table));
+                throw reason
+            }
+        )
         
         if (!_optimistic) {
             _observers.map((obs) => obs(_table))
