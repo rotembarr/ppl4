@@ -246,16 +246,37 @@ describe('Assignment 4 Part 2', () => {
 
         test('observers get updates', async () => {
             const mockFn = jest.fn()
-            optService.subscribe(mockFn)
+            service.subscribe(mockFn)
 
             const bookC = {title: 'title_C', author: 'author_C'}
-            await optService.set('C', bookC)
+            await service.set('C', bookC)
             expect(mockFn).toHaveBeenCalledTimes(1)
             expect(mockFn).toHaveBeenNthCalledWith(1, {...templateBookTable, 'C': bookC})
             mockFn.mockReset()
-            await optService.delete('B')
+            await service.delete('B')
             expect(mockFn).toHaveBeenCalledTimes(1)
             expect(mockFn).toHaveBeenNthCalledWith(1, {'A': templateBookTable['A'], 'C': bookC})
+        })
+
+        test('multiple observers get updates', async () => {
+            const mockFn1 = jest.fn()
+            const mockFn2 = jest.fn()
+            service.subscribe(mockFn1)
+            service.subscribe(mockFn2)
+
+            const bookC = {title: 'title_C', author: 'author_C'}
+            await service.set('C', bookC)
+            expect(mockFn1).toHaveBeenCalledTimes(1)
+            expect(mockFn1).toHaveBeenNthCalledWith(1, {...templateBookTable, 'C': bookC})
+            expect(mockFn2).toHaveBeenCalledTimes(1)
+            expect(mockFn2).toHaveBeenNthCalledWith(1, {...templateBookTable, 'C': bookC})
+            mockFn1.mockReset()
+            mockFn2.mockReset()
+            await service.delete('B')
+            expect(mockFn1).toHaveBeenCalledTimes(1)
+            expect(mockFn1).toHaveBeenNthCalledWith(1, {'A': templateBookTable['A'], 'C': bookC})
+            expect(mockFn2).toHaveBeenCalledTimes(1)
+            expect(mockFn2).toHaveBeenNthCalledWith(1, {'A': templateBookTable['A'], 'C': bookC})
         })
 
         test('optimistic observers get updates', async () => {

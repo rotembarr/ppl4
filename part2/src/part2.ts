@@ -160,18 +160,18 @@ export async function makeReactiveTableService<T>(sync: (table?: Table<T>) => Pr
     // Variables.
     let _sync: ((table?: Table<T>) => Promise<Table<T>>) = sync;
     let _optimistic: boolean = optimistic
-    let _table: Table<T> = await sync()
-    let _observer: ((table: Table<T>) => void) = null as any;
+    let _table: mutableTable<T> = await sync()
+    let _observers: ((table: Table<T>) => void)[] = [];
 
     const handleMutation = async (newTable: Table<T>) => {
-        if ((_observer != null) && (_optimistic)) {
-            _observer(_table)
+        if (_optimistic) {
+            _observers.map((obs) => obs(newTable))
         }
-
-        _table = await _sync(newTable)
-
-        if (!(_observer === null)) {
-            _observer(_table)
+        
+        _table = await _sync(newTable).catch((reason) => {_observers.map((obs) => obs(_table)); throw reason})
+        
+        if (!_optimistic) {
+            _observers.map((obs) => obs(_table))
         }
     }
 
@@ -184,20 +184,19 @@ export async function makeReactiveTableService<T>(sync: (table?: Table<T>) => Pr
             }
         },
         set(key: string, val: T): Promise<void> {
-            return handleMutation(Object.assign(_table, {[key]: val}))
+            return handleMutation(Object.assign(toMutableTable(_table), {[key]: val}))
         },
         delete(key: string): Promise<void> {
             if (!Object.keys(_table).includes(key)) {
                 throw MISSING_KEY;
             } else {
-                return handleMutation(
-                    ( Object.entries(_table).reduce(
-                        (acc, [k, v]) => (key === k) ? acc :(Object.assign(acc, {[k]: v})), {}))
-                )
+                const newTable = Object.entries(_table).reduce(
+                    (acc, [k, v]) => (key === k) ? acc :(Object.assign(acc, {[k]: v})), {});
+                return handleMutation(newTable)
             }
         },
         subscribe(observer: (table: Table<T>) => void): void {
-            _observer = observer
+            _observers.push(observer)
         }
     }
 }
