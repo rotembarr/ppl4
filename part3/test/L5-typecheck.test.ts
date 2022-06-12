@@ -5,7 +5,7 @@ import { typeofProgram, L51typeof, initTEnv, getRecords, getTypeDefinitions,
 import { applyTEnv } from '../src/L5/TEnv';
 import { isNumTExp, isProcTExp, makeBoolTExp, makeNumTExp, makeProcTExp, makeTVar, 
          makeVoidTExp, parseTE, unparseTExp, TExp, makeUserDefinedNameTExp, 
-         isUserDefinedTExp, isUserDefinedNameTExp, makeAnyTExp, isAnyTExp, UserDefinedTExp, isTExp } from '../src/L5/TExp';
+         isUserDefinedTExp, isUserDefinedNameTExp, makeAnyTExp, isAnyTExp, UserDefinedTExp, isTExp, isVoidTExp } from '../src/L5/TExp';
 import { makeOk, isOkT, bind, mapv, isFailure, Result } from '../src/shared/result';
 
 describe('L5 Type Checker', () => {
@@ -447,4 +447,104 @@ describe('L5 Type Checker', () => {
 
 	});
 
+    describe('Rotem', () => {
+        it('test good records', () => {
+
+            const p = `(L51
+                (define-type Shape
+                    (circle (radius : number))
+                    (rectangle (width : number) (height : number)))
+                (define-type Shape2
+                    (circle (radius : number))
+                    (rectangle (width : number) (height : number)))
+            )`;
+            const pp = parseL51(p);
+            expect(pp).toSatisfy(isOkT(isProgram));
+            mapv(pp, (p: Program) => {
+                const t = typeofProgram(p, initTEnv(p), p);
+                expect(t).toSatisfy(isOkT(isVoidTExp));
+                }
+            )
+        });
+
+        it('test bad records', () => {
+
+            const p = `(L51
+                (define-type Shape
+                    (circle (radius : number))
+                    (rectangle (width : number) (height : number)))
+                (define-type Shape2
+                    (circle (radius : number) (radius2 : number))
+                    (rectangle (width : number) (height : number)))
+            )`;
+            const pp = parseL51(p);
+            expect(pp).toSatisfy(isOkT(isProgram));
+            mapv(pp, (p: Program) => {
+                const t = typeofProgram(p, initTEnv(p), p);
+                expect(t).toSatisfy(isFailure);
+                }
+            )
+        });
+
+        it('test bad type case1', () => {
+
+            const p = `(L51
+                (define-type Shape
+                    (circle (radius : number))
+                    (rectangle (width : number) (height : number)))
+                (define (s : number) 9)
+                (type-case Shape s
+                    (circle (r) (make-rectangle r r))
+                    (rectangle (w h) (make-circle (+ w h))))
+            )`;
+            const pp = parseL51(p);
+            expect(pp).toSatisfy(isOkT(isProgram));
+            mapv(pp, (p: Program) => {
+                const t = typeofProgram(p, initTEnv(p), p);
+                expect(t).toSatisfy(isFailure);
+                }
+            )
+        });
+
+        it('test bad type case2', () => {
+
+            const p = `(L51
+                (define-type Shape
+                    (circle (radius : number))
+                    (rectangle (width : number) (height : number)))
+                (define (s : circle) (make-circle 1))
+                (type-case Shape s
+                    (rectangle (w h) (make-circle (+ w h))))
+            )`;
+            const pp = parseL51(p);
+            expect(pp).toSatisfy(isOkT(isProgram));
+            mapv(pp, (p: Program) => {
+                const t = typeofProgram(p, initTEnv(p), p);
+                expect(t).toSatisfy(isFailure);
+                }
+            )
+        });
+        
+        it('test bad type case3', () => {
+
+            const p = `(L51
+                (define-type Shape
+                    (circle (radius : number))
+                    (rectangle (width : number) (height : number)))
+                (define (s : number) 9)
+                (type-case Shape s
+                    (circle (r m) (make-rectangle r r))
+                    (rectangle (w h) (make-circle (+ w h))))
+            )`;
+            const pp = parseL51(p);
+            expect(pp).toSatisfy(isOkT(isProgram));
+            mapv(pp, (p: Program) => {
+                const t = typeofProgram(p, initTEnv(p), p);
+                expect(t).toSatisfy(isFailure);
+                }
+            )
+        });
+
+        
+    });
 });
