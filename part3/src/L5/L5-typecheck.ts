@@ -11,10 +11,12 @@ import { isProcTExp, makeBoolTExp, makeNumTExp, makeProcTExp, makeStrTExp, makeV
          parseTE, unparseTExp, Record,
          BoolTExp, NumTExp, StrTExp, TExp, VoidTExp, UserDefinedTExp, isUserDefinedTExp, UDTExp, 
          isNumTExp, isBoolTExp, isStrTExp, isVoidTExp,
-         isRecord, ProcTExp, makeUserDefinedNameTExp, Field, makeAnyTExp, isAnyTExp, isUserDefinedNameTExp, UserDefinedNameTExp, makeTVar, makeFreshTVar } from "./TExp";
+         isRecord, ProcTExp, makeUserDefinedNameTExp, Field, makeAnyTExp, isAnyTExp, isUserDefinedNameTExp, UserDefinedNameTExp, makeTVar, makeFreshTVar, makeEmptyTupleTExp, makeNonEmptyTupleTExp } from "./TExp";
 import { isEmpty, allT, first, rest, cons } from '../shared/list';
 import { Result, makeFailure, bind, makeOk, zipWithResult, mapv, mapResult, isFailure, either, isOk } from '../shared/result';
-import { makeEmptySExp } from './L5-value';
+import { isCompoundSExp, isEmptySExp, isSymbolSExp, makeEmptySExp } from './L5-value';
+import { isNumber } from 'util';
+import { isBoolean, isString } from '../shared/type-predicates';
 
 // L51
 export const getTypeDefinitions = (p: Program): UserDefinedTExp[] => {
@@ -154,14 +156,14 @@ export const checkCoverType = (types: TExp[], p: Program): Result<TExp> => {
 
 // Compute the initial TEnv given user defined types
 // =================================================
-// TODO L51
+// done L51
 // Construct type environment for the user-defined type induced functions
 // Type constructor for all records
 // Type predicate for all records
 // Type predicate for all user-defined-types
 // All globally defined variables (with define)
 
-// TODO: Define here auxiliary functions for TEnv computation
+// Done: Define here auxiliary functions for TEnv computation
 
 // TOODO L51
 // Initialize TEnv with:
@@ -200,7 +202,7 @@ export const initTEnv = (p: Program): TEnv => {
 
 // Verify that user defined types and type-case expressions are semantically correct
 // =================================================================================
-// TODO L51
+// Done L51
 const isUniqueArray = <T>(arr : T[]) : boolean => {
     console.log(arr)
     if (arr.length === 0) {
@@ -209,6 +211,16 @@ const isUniqueArray = <T>(arr : T[]) : boolean => {
         return arr.every(elem => equals(elem, first(arr)))
     }
 }
+
+const udContainsRec = (ud : UserDefinedTExp) : boolean => 
+    ud.records.map((rec : Record) => 
+        rec.fields.map(f => f.te).includes(ud)
+    ).reduce((acc, curr) => acc = acc || curr, false)
+
+const udContainsBase = (ud : UserDefinedTExp) : boolean => 
+    ud.records.map((rec : Record) => 
+        rec.fields.length === 0
+    ).reduce((acc, curr) => acc = acc || curr, false)
 
 
 const checkUserDefinedTypes = (p: Program): Result<true> => {
@@ -224,7 +236,10 @@ const checkUserDefinedTypes = (p: Program): Result<true> => {
     .every((elem) => elem === true);
 
     // If a recursive type has no base case
-    const constraint2 = true
+    const constraint2 = getTypeDefinitions(p)
+    .map((ud : UserDefinedTExp) => {
+        udContainsRec(ud) ? udContainsBase(ud) : true 
+    })
 
     if (constraint1 && constraint2) {
         return makeOk(true);
@@ -313,7 +328,7 @@ const numOpTExp = parseTE('(number * number -> number)');
 const numCompTExp = parseTE('(number * number -> boolean)');
 const boolOpTExp = parseTE('(boolean * boolean -> boolean)');
 
-// L51 Todo: cons, car, cdr, list
+// L51: cons, car, cdr, list
 export const typeofPrim = (p: PrimOp): Result<TExp> =>
     (p.op === '+') ? numOpTExp :
     (p.op === '-') ? numOpTExp :
@@ -338,7 +353,7 @@ export const typeofPrim = (p: PrimOp): Result<TExp> =>
     (p.op === 'newline') ? parseTE('(Empty -> void)') :
     makeFailure(`Primitive not yet implemented: ${p.op}`);
 
-// Done L51 TODO-check
+// Done L51 
 // Change this definition to account for possibility of subtype expressions between thenTE and altTE
 // 
 // Purpose: compute the type of an if-exp
@@ -441,13 +456,15 @@ export const typeofLetrec = (exp: LetrecExp, tenv: TEnv, p: Program): Result<TEx
     return bind(constraints, _ => typeofExps(exp.body, tenvBody, p));
 };
 
-// TODO - write the true definition
+// Done - write the true definition
 // Purpose: compute the type of a define
 // Typing rule:
-//   (define (var : texp) val)
-//   tenv-val = extend-tenv(var:texp; tenv)
-// If   type<val>(tenv-val) = texp
-// then type<(define (var : texp) val)>(tenv) = void
+// For every: type environment _Tenv
+//            variable declaration _x1
+//            expressions _e1 and
+//            type expressions _S1:
+// If Tenv o {_x1 : _S1} |- _e1 : _S1
+// then _Tenv |- (define _x1 _e1) : void
 export const typeofDefine = (exp: DefineExp, tenv: TEnv, p: Program): Result<VoidTExp> => {
     const v = exp.var.var;
     const texp = exp.var.texp;
@@ -466,43 +483,79 @@ export const typeofProgram = (exp: Program, tenv: TEnv, p: Program): Result<TExp
 // Done L51
 // Purpose: compute the type of a define-type
 // Typing rule:
-// For Every var Decleration: varDecl_11,....varDecl_mn
-//   (define-type type  (record_1 (varDecl_11 varDecl_12 ... varDecl_1n)) ... (record_m (varDecl_m1 varDecl_m2 ... varDecl_mn)))
-// If   type<val>(varDecij.var) = texp_ij
-// then type<((define-type type  (record_1 (varDecl_11 varDecl_12 ... varDecl_1n)) ... (record_m (varDecl_m1 varDecl_m2 ... varDecl_mn))))>(tenv) = void
+//  For Every: type environment _Tenv
+//              records rec1, .. recn
+//  Then _Tenv |- (define-type type rec1, ..., recn) : void
 export const typeofDefineType = (exp: DefineTypeExp, _tenv: TEnv, _p: Program): Result<TExp> => {
     // Nothing to do because type already addedin initEnv.
     return makeOk(makeVoidTExp());
 }
 
-// TODO L51
+// Done L51
+// Typing rule for set!:
+//   For Every: type environment _Tenv
+//              variable reference _x1
+//              expressions _e1 and
+//              type expressions _S1:
+//  if _Tenv |- e1 : _S1 &&
+//     _Tenv |- _x1 : _S1
+//  then _Tenv |- (set! _x1 _e1) : void
 export const typeofSet = (exp: SetExp, _tenv: TEnv, _p: Program): Result<VoidTExp> =>
-    makeFailure(`Todo ${JSON.stringify(exp, null, 2)}`);
+    bind(typeofExp(exp.var, _tenv, _p), (varRefType : TExp) =>
+        bind(typeofExp(exp.val, _tenv, _p), (valType : TExp) =>
+            bind(checkEqualType(varRefType, valType, exp, _p), (_) =>
+                makeOk(makeVoidTExp())
+            )
+        )
+    )
 
-// TODO L51
+// Purpose: compute the type of a litExp
+// Typing rule:
+//  For Every:  type environment _Tenv
+//              number expression _n
+//              boolean expression _b
+//              string expression _s
+//              symbol expression _m
+//              compound SExp _compSexp
+//  Then _Tenv |- _n : num-te
+//       _Tenv |- _b : bool-te
+//       _Tenv |- _s : str-te
+//       _Tenv |- _m : ???
+//       _Tenv |- `() : EmptyTupleTExp
+//       _Tenv |- _compSexp : NonEmptyTupleTExp
 export const typeofLit = (exp: LitExp, _tenv: TEnv, _p: Program): Result<TExp> =>
-    makeFailure(`Todo ${JSON.stringify(exp, null, 2)}`);
+    isEmptySExp(exp.val) ? makeOk(makeEmptyTupleTExp()) :
+    isSymbolSExp(exp.val) ? makeOk(makeStrTExp()) :
+    isCompoundSExp(exp.val) ? makeOk(makeNonEmptyTupleTExp([])) :
+    isString(exp.val) ? makeOk(makeStrTExp()) :
+    isNumber(exp.val) ? makeOk(makeNumTExp()) :
+    isBoolean(exp.val) ? makeOk(makeBoolTExp()) :
+    makeFailure(`Bad lit type ${exp.val}`);
 
-// TODO: L51
+// Done: L51
 // Purpose: compute the type of a type-case
 // Typing rule:
-// For all user-defined-type id
-//         with component records record_1 ... record_n
-//         with fields (field_ij) (i in [1...n], j in [1..R_i])
-//         val CExp
-//         body_i for i in [1..n] sequences of CExp
-//   ( type-case id val (record_1 (field_11 ... field_1r1) body_1)...  )
+//  For Every: type environment _Tenv
+//             user-defined-type id, with component records _r1 ... _rn
+//             variable reference val
+//             cases _c1, ... , _cm
+//             type expressions _S1, ... , _Sm:
 //
-// If   type<val>(tenv) = id
-//      type<body1>(tenv) = t1
-//      ...
-//      type<bodyn>(tenv) = tn
-// s.t ti < tj or tj < ti for all i,j
-// then type< ( type-case id val (record_1 (field_11 ... field_1r1) body_1)...  )>(tenv) = t
-// where t is the most specific type
+//  If  _Tenv |- val : id
+//      m = n
+//      [-c1.typeName, ...., _cn.typeName] = [_r1.typeName, ...., _rn.typeName]
+//      _Tenv |- _c1 : _S1
+//        .
+//        .
+//        .
+//      _Tenv |- _cn : _Sn
+//      checkCoverTypes([_S1,...,_Sn]).length != 0
+//      
+//  Then _Tenv |- (type-case id val _c1, ..., cn) : t
+//      where t is the most specific type from checkCoverTypes([_S1,...,_Sn])
 export const typeofTypeCase = (exp: TypeCaseExp, tenv: TEnv, p: Program): Result<TExp> => {
 
-    // Check type<val>(tenv) = id
+    // Check _Tenv |- val : id
     const constraint1 = 
         bind(getTypeByName(exp.typeName, p), (udTExp : UDTExp) =>
             bind(typeofExp(exp.val, tenv, p), (valTexp : TExp) => 
@@ -519,7 +572,6 @@ export const typeofTypeCase = (exp: TypeCaseExp, tenv: TEnv, p: Program): Result
             checkCoverType(types, p)
         )
 
-
     return bind(constraint1, (_) => bind(constraint2, (_) => OutType));
 }
 
@@ -535,11 +587,15 @@ const typeofCase = (exp: CaseExp, tenv: TEnv, p: Program): Result<TExp> => {
     const constraint = bind(recResult, (rec : Record) =>
         rec.fields.length == exp.varDecls.length ? makeOk(true) : makeFailure("Bad number of parameter used in type case")
     )
+
+    // Check the type of the bodies good with the record types
     const out = bind(constraint, (_) =>
         bind(argsTypeResult, (types :TExp[]) => 
-            typeofExps(exp.body, 
+            typeofExps(
+                exp.body, 
                 makeExtendTEnv(map((vd) => vd.var, exp.varDecls), types, tenv), 
-                p)
+                p
+            )
         )
     )
     
